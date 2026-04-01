@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>DrawGuess AI</title>
+
+    <style>
+
+        body{
+            text-align:center;
+            font-family:Arial;
+        }
+
+        canvas{
+            border:2px solid black;
+            cursor:crosshair;
+        }
+
+        #prediction{
+            font-size:22px;
+            margin-top:20px;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<h2>Draw Something</h2>
+
+<canvas id="canvas" width="500" height="500"></canvas>
+
+<br><br>
+
+<button onclick="clearCanvas()">Clear</button>
+
+<h3 id="prediction">Prediction: </h3>
+
+<!-- socket.io client -->
+<script src="http://localhost:3000/socket.io/socket.io.js"></script>
+
+<script src="script.js"></script>
+
+</body>
+</html>
