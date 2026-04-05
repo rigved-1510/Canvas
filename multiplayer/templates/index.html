@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Quick Draw!</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+  :root {
+    --ink:    #1a1a2e;
+    --paper:  #fef9f0;
+    --cream:  #fff8e7;
+    --yellow: #ffd166;
+    --coral:  #ef476f;
+    --teal:   #06d6a0;
+    --blue:   #118ab2;
+    --shadow: 4px 4px 0 var(--ink);
+    --radius: 16px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(255,209,102,0.15) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(6,214,160,0.12) 0%, transparent 40%);
+  }
+
+  #app { max-width: 680px; margin: 0 auto; padding: 16px; }
+
+  .screen { display: none; animation: fadeIn .25s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+  .logo {
+    font-family: 'Fredoka One', sans-serif;
+    font-size: clamp(2rem, 8vw, 3.2rem);
+    color: var(--ink); text-align: center; letter-spacing: 1px; margin-bottom: 4px;
+  }
+  .logo span { color: var(--coral); }
+  .tagline { text-align:center; color:#888; font-size:.9rem; margin-bottom: 28px; }
+
+  .card {
+    background: white; border: 2.5px solid var(--ink);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 24px; margin-bottom: 16px;
+  }
+  .card h2 { font-family: 'Fredoka One', sans-serif; font-size: 1.3rem; margin-bottom: 16px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display:block; font-weight:700; font-size:.85rem; margin-bottom:6px; color:#555; text-transform:uppercase; letter-spacing:.5px; }
+  .field input {
+    width:100%; padding:12px 14px; border:2.5px solid var(--ink); border-radius:10px;
+    font-family:'Nunito',sans-serif; font-size:1rem; font-weight:700;
+    background:var(--cream); outline:none; transition:border-color .2s, box-shadow .2s;
+  }
+  .field input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(17,138,178,.15); }
+
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-family:'Fredoka One',sans-serif; font-size:1.1rem; letter-spacing:.5px;
+    padding:12px 24px; border-radius:10px; border:2.5px solid var(--ink);
+    box-shadow:var(--shadow); cursor:pointer; transition:transform .1s, box-shadow .1s;
+    width:100%;
+  }
+  .btn:active { transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink); }
+  .btn-yellow { background:var(--yellow); color:var(--ink); }
+  .btn-teal   { background:var(--teal);   color:var(--ink); }
+  .btn-blue   { background:var(--blue);   color:white; }
+  .btn:disabled { opacity:.45; pointer-events:none; }
+
+  .divider { display:flex; align-items:center; gap:10px; margin:18px 0; color:#aaa; font-size:.85rem; }
+  .divider::before, .divider::after { content:''; flex:1; height:1.5px; background:#e8e0d0; }
+
+  .player-list { list-style:none; display:flex; flex-direction:column; gap:8px; }
+  .player-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; background:var(--cream);
+    border:2px solid #e8e0d0; border-radius:10px; font-weight:700;
+  }
+  .player-item .avatar {
+    width:36px; height:36px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; border:2px solid var(--ink); flex-shrink:0;
+  }
+  .player-item .host-badge {
+    margin-left:auto; background:var(--yellow); color:var(--ink);
+    font-size:.7rem; font-weight:800; padding:2px 8px;
+    border-radius:99px; border:1.5px solid var(--ink);
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+
+  .room-code-display {
+    background:var(--ink); color:white;
+    border-radius:12px; padding:14px 20px; text-align:center; margin-bottom:16px;
+  }
+  .room-code-display .label { font-size:.75rem; opacity:.6; text-transform:uppercase; letter-spacing:1px; }
+  .room-code-display .code  { font-family:'Fredoka One',sans-serif; font-size:2.8rem; letter-spacing:6px; }
+  .room-code-display .url   { font-size:.75rem; opacity:.55; word-break:break-all; margin-top:4px; }
+
+  #game-header {
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+  }
+  .round-info { font-family:'Fredoka One',sans-serif; font-size:1rem; color:#888; }
+
+  .timer-wrap { position:relative; width:56px; height:56px; flex-shrink:0; }
+  .timer-wrap svg { transform:rotate(-90deg); }
+  .timer-wrap circle { fill:none; stroke-width:4; }
+  .timer-bg { stroke:#e8e0d0; }
+  .timer-fg { stroke:var(--teal); stroke-linecap:round; transition:stroke-dashoffset .9s linear, stroke .3s; }
+  .timer-num {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:'Fredoka One',sans-serif; font-size:1.3rem; color:var(--ink);
+  }
+
+  .word-prompt {
+    background:var(--ink); color:white; text-align:center;
+    padding:10px 20px; border-radius:12px; margin-bottom:10px;
+  }
+  .word-prompt .label { font-size:.7rem; opacity:.55; text-transform:uppercase; letter-spacing:1px; }
+  .word-prompt .word  { font-family:'Fredoka One',sans-serif; font-size:1.8rem; }
+
+  #mini-scores { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+  .mini-score-chip {
+    display:flex; align-items:center; gap:4px;
+    background:white; border:2px solid #e8e0d0; border-radius:99px;
+    padding:3px 10px; font-size:.8rem; font-weight:700;
+  }
+  .mini-score-chip.me { border-color:var(--blue); background:rgba(17,138,178,.07); }
+
+  #got-it-banner {
+    display:none; background:var(--teal); color:var(--ink);
+    text-align:center; padding:10px; border-radius:10px;
+    font-family:'Fredoka One',sans-serif; font-size:1.2rem;
+    margin-bottom:10px; animation:pop .3s cubic-bezier(.175,.885,.32,1.275);
+  }
+  @keyframes pop { from{transform:scale(.7);opacity:0} to{transform:scale(1);opacity:1} }
+  #got-it-banner.show { display:block; }
+
+  .toolbar {
+    display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;
+    max-width:500px; margin-left:auto; margin-right:auto;
+  }
+  .color-btn {
+    width:30px; height:30px; border-radius:50%;
+    border:2.5px solid var(--ink); cursor:pointer; transition:transform .15s; flex-shrink:0;
+  }
+  .color-btn:hover, .color-btn.active { transform:scale(1.25); }
+  .size-btn {
+    background:white; border:2px solid var(--ink); border-radius:8px;
+    padding:4px 10px; cursor:pointer; font-size:.8rem; font-weight:700;
+  }
+  .size-btn.active { background:var(--ink); color:white; }
+  .toolbar-sep { flex:1; }
+  .clear-btn {
+    font-family:'Fredoka One',sans-serif; font-size:.9rem;
+    background:white; border:2px solid var(--ink);
+    border-radius:8px; padding:5px 12px; cursor:pointer;
+  }
+  .clear-btn:hover { background:var(--coral); color:white; }
+
+  /*
+   * Canvas is always 500×500 logical pixels — matches the working single-player app.
+   * CSS scales it to fit smaller screens while preserving the coordinate space.
+   */
+  #canvas-wrap {
+    border:2.5px solid var(--ink); border-radius:var(--radius);
+    overflow:hidden; box-shadow:var(--shadow); background:white;
+    touch-action:none; margin:0 auto 10px;
+    width:100%; max-width:500px; aspect-ratio:1/1; position:relative;
+  }
+  #draw-canvas {
+    /* Always 500×500 internal resolution; CSS stretches to fill wrapper */
+    width:100%; height:100%;
+    cursor:crosshair; display:block;
+  }
+
+  #live-pred {
+    padding:10px 14px; background:var(--cream);
+    border:2px solid #e8e0d0; border-radius:10px;
+    font-size:.85rem; margin:0 auto 10px; min-height:38px;
+    max-width:500px;
+  }
+  #live-pred .pred-label { color:#888; font-size:.75rem; text-transform:uppercase; letter-spacing:.5px; }
+  #live-pred .pred-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
+  .pred-chip {
+    padding:3px 10px; border-radius:99px; font-size:.8rem; font-weight:700;
+    border:2px solid currentColor;
+  }
+  .pred-chip.match { background:var(--teal); color:white; border-color:var(--teal); }
+  .pred-chip.near  { background:var(--yellow); color:var(--ink); border-color:var(--yellow); }
+  .pred-chip.other { background:white; color:#888; border-color:#ddd; }
+
+  .result-row {
+    display:flex; align-items:center; gap:12px;
+    padding:12px 14px; background:var(--cream);
+    border:2px solid #e8e0d0; border-radius:10px; margin-bottom:8px;
+  }
+  .result-row .rank  { font-family:'Fredoka One',sans-serif; font-size:1.4rem; width:32px; }
+  .result-row .rname { font-weight:800; flex:1; }
+  .result-row .rscore { font-family:'Fredoka One',sans-serif; font-size:1.2rem; color:var(--blue); }
+  .result-row .earned { font-size:.75rem; color:var(--teal); font-weight:700; }
+  .result-row.winner-row { background:#fff9e0; border-color:var(--yellow); }
+
+  .winner-card {
+    text-align:center; padding:32px 24px;
+    background:var(--ink); color:white; border-radius:var(--radius); margin-bottom:16px;
+  }
+  .winner-card .trophy { font-size:4rem; animation:bounce 1s infinite alternate; }
+  @keyframes bounce { from{transform:translateY(0)} to{transform:translateY(-10px)} }
+  .winner-card h2 { font-family:'Fredoka One',sans-serif; font-size:2rem; margin:8px 0 4px; }
+  .winner-card .winner-name  { font-family:'Fredoka One',sans-serif; font-size:2.8rem; color:var(--yellow); }
+  .winner-card .winner-score { font-size:1.1rem; opacity:.7; margin-top:4px; }
+
+  #toast {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:var(--ink); color:white; padding:10px 20px; border-radius:99px;
+    font-weight:700; font-size:.9rem; transition:transform .3s; z-index:999;
+    white-space:nowrap; pointer-events:none;
+  }
+  #toast.show { transform:translateX(-50%) translateY(0); }
+
+  #waiting-overlay {
+    display:none; position:fixed; inset:0;
+    background:rgba(26,26,46,.7); z-index:50;
+    align-items:center; justify-content:center; flex-direction:column; gap:16px;
+  }
+  #waiting-overlay.show { display:flex; }
+  #waiting-overlay p { color:white; font-family:'Fredoka One',sans-serif; font-size:1.5rem; }
+  .spinner {
+    width:48px; height:48px; border:5px solid rgba(255,255,255,.2);
+    border-top-color:var(--yellow); border-radius:50%; animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .error-msg { color:var(--coral); font-size:.85rem; font-weight:700; margin-top:6px; display:none; }
+  .mt8 { margin-top:8px; }
+  .center { text-align:center; }
+  .muted  { color:#888; font-size:.85rem; }
+  .av0{background:#ffd166;} .av1{background:#06d6a0;}
+  .av2{background:#ef476f;color:white;} .av3{background:#118ab2;color:white;}
+  .av4{background:#845ec2;color:white;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══ HOME ═══ -->
+  <div id="screen-home" class="screen active">
+    <p class="logo">Quick <span>Draw!</span></p>
+    <p class="tagline">Draw it fast — beat your friends ✏️</p>
+
+    <div class="card">
+      <h2>Create a Room</h2>
+      <div class="field">
+        <label>Your Name</label>
+        <input id="host-name" type="text" maxlength="16" placeholder="e.g. Picasso" autocomplete="off">
+      </div>
+      <button class="btn btn-yellow" onclick="createRoom()">🎨 Create &amp; Host</button>
+      <p id="create-error" class="error-msg"></p>
+    </div>
+
+    <div class="divider">or join an existing game</div>
+
+    <div class="card">
+      <h2>Join a Room</h2>
+      <div class="field">
+        <label>Your Name</label>
+        <input id="join-name" type="text" maxlength="16" placeholder="e.g. Da Vinci" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Room Code</label>
+        <input id="join-code" type="text" maxlength="4" placeholder="ABCD" autocomplete="off"
+               style="text-transform:uppercase;letter-spacing:4px;font-size:1.3rem;">
+      </div>
+      <button class="btn btn-blue" onclick="joinRoom()">🚀 Join Game</button>
+      <p id="join-error" class="error-msg"></p>
+    </div>
+  </div>
+
+  <!-- ═══ LOBBY ═══ -->
+  <div id="screen-lobby" class="screen">
+    <p class="logo">Quick <span>Draw!</span></p>
+
+    <div class="room-code-display">
+      <div class="label">Room Code — share with friends on the same Wi-Fi</div>
+      <div class="code" id="lobby-code">····</div>
+      <div class="url" id="lobby-url"></div>
+    </div>
+
+    <div class="card">
+      <h2>Players <span id="player-count" class="muted">(1/5)</span></h2>
+      <ul class="player-list" id="lobby-player-list"></ul>
+    </div>
+
+    <div id="host-controls">
+      <button class="btn btn-teal" id="start-btn" onclick="startGame()" disabled>🎮 Start Game</button>
+      <p class="muted center mt8" style="font-size:.8rem;">Need at least 1 player to start</p>
+    </div>
+    <div id="guest-waiting" style="display:none;" class="center muted">
+      ⏳ Waiting for the host to start the game…
+    </div>
+  </div>
+
+  <!-- ═══ GAME ═══ -->
+  <div id="screen-game" class="screen">
+    <div id="game-header">
+      <div class="round-info">Round <span id="round-num">1</span> / <span id="round-total">5</span></div>
+      <div class="timer-wrap">
+        <svg width="56" height="56" viewBox="0 0 56 56">
+          <circle class="timer-bg" cx="28" cy="28" r="24"/>
+          <circle class="timer-fg" id="timer-ring" cx="28" cy="28" r="24"
+            stroke-dasharray="150.8" stroke-dashoffset="0"/>
+        </svg>
+        <div class="timer-num" id="timer-num">20</div>
+      </div>
+    </div>
+
+    <div class="word-prompt">
+      <div class="label">Draw this</div>
+      <div class="word" id="draw-word">—</div>
+    </div>
+
+    <div id="mini-scores"></div>
+    <div id="got-it-banner">✅ Nice! The AI recognised it — keep drawing!</div>
+
+    <div class="toolbar">
+      <div class="color-btn active" style="background:#1a1a2e" data-color="#1a1a2e" onclick="setColor(this)"></div>
+      <div class="color-btn" style="background:#ef476f" data-color="#ef476f" onclick="setColor(this)"></div>
+      <div class="color-btn" style="background:#118ab2" data-color="#118ab2" onclick="setColor(this)"></div>
+      <div class="color-btn" style="background:#06d6a0" data-color="#06d6a0" onclick="setColor(this)"></div>
+      <div class="color-btn" style="background:#ffd166" data-color="#ffd166" onclick="setColor(this)"></div>
+      <div class="size-btn active" data-size="3"  onclick="setSize(this)">S</div>
+      <div class="size-btn"        data-size="7"  onclick="setSize(this)">M</div>
+      <div class="size-btn"        data-size="14" onclick="setSize(this)">L</div>
+      <div class="toolbar-sep"></div>
+      <div class="clear-btn" onclick="clearCanvas()">🗑 Clear</div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="draw-canvas" width="500" height="500"></canvas>
+    </div>
+
+    <div id="live-pred">
+      <div class="pred-label">Start drawing — the AI will guess after each stroke</div>
+    </div>
+  </div>
+
+  <!-- ═══ RESULTS ═══ -->
+  <div id="screen-results" class="screen">
+    <p class="logo" style="font-size:1.8rem;margin-bottom:8px;">
+      Round <span id="res-round">1</span> Results
+    </p>
+    <div class="card">
+      <h2>The word was: <span id="res-word" style="color:var(--coral)"></span></h2>
+      <div id="results-list"></div>
+    </div>
+    <p class="center muted" id="next-msg">Next round starting soon…</p>
+  </div>
+
+  <!-- ═══ GAME OVER ═══ -->
+  <div id="screen-gameover" class="screen">
+    <div class="winner-card">
+      <div class="trophy">🏆</div>
+      <h2>Game Over!</h2>
+      <div class="winner-name" id="winner-name">—</div>
+      <div class="winner-score" id="winner-score"></div>
+    </div>
+    <div class="card">
+      <h2>Final Leaderboard</h2>
+      <div id="final-leaderboard"></div>
+    </div>
+    <div id="host-play-again" style="display:none">
+      <button class="btn btn-yellow" onclick="playAgain()">🔄 Play Again</button>
+    </div>
+    <p class="center muted mt8" id="guest-play-again" style="display:none">
+      Waiting for host to start a new game…
+    </p>
+  </div>
+
+</div><!-- /#app -->
+
+<div id="waiting-overlay">
+  <div class="spinner"></div>
+  <p id="waiting-text">Connecting…</p>
+</div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const state = {
+  mySid: null, roomId: null, isHost: false, myName: '',
+  roundSecs: 20, currentWord: '', scored: false,
+  classifyInterval: null,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SOCKET
+// ═══════════════════════════════════════════════════════════════════════════
+const socket = io({ transports: ['websocket', 'polling'] });
+
+socket.on('connect',    () => hideOverlay());
+socket.on('disconnect', () => showToast('⚡ Disconnected'));
+
+socket.on('room_created', d => { state.mySid = d.sid; state.roomId = d.room_id; state.isHost = true; });
+socket.on('room_joined',  d => { state.mySid = d.sid; state.roomId = d.room_id; state.isHost = false; });
+socket.on('lobby_update', d => { renderLobby(d); showScreen('lobby'); });
+socket.on('error',        d => { showError(d.msg); hideOverlay(); });
+
+socket.on('game_starting', () => showToast('🎮 Game starting!'));
+
+socket.on('round_start', d => {
+  state.currentWord = d.word;
+  state.scored      = false;
+  document.getElementById('round-num').textContent   = d.round;
+  document.getElementById('round-total').textContent = d.total_rounds;
+  document.getElementById('draw-word').textContent   = d.word;
+  document.getElementById('got-it-banner').classList.remove('show');
+  document.getElementById('live-pred').innerHTML =
+    '<div class="pred-label">Start drawing — the AI will guess after each stroke</div>';
+  clearCanvas();
+  startTimer(d.seconds);
+  startClassifyLoop();
+  showScreen('game');
+});
+
+socket.on('tick', d => updateTimer(d.remaining));
+
+socket.on('live_result', d => {
+  renderLivePred(d);
+  if (d.correct && d.earned > 0 && !state.scored) {
+    state.scored = true;
+    document.getElementById('got-it-banner').classList.add('show');
+    showToast(`🎉 +${d.earned} points!`);
+  }
+});
+
+socket.on('player_scored', d => showToast(`✅ ${d.name} got it!`));
+
+socket.on('round_end', d => {
+  stopClassifyLoop();
+  stopTimer();
+  showRoundResults(d);
+});
+
+socket.on('game_over', d => showGameOver(d));
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+function createRoom() {
+  const name = document.getElementById('host-name').value.trim();
+  if (!name) { showFieldError('create-error', 'Enter your name first!'); return; }
+  state.myName = name;
+  showOverlay('Creating room…'); hideFieldError('create-error');
+  socket.emit('create_room', { name });
+}
+function joinRoom() {
+  const name = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!name) { showFieldError('join-error', 'Enter your name!'); return; }
+  if (code.length !== 4) { showFieldError('join-error', 'Room code must be 4 letters.'); return; }
+  state.myName = name;
+  showOverlay('Joining room…'); hideFieldError('join-error');
+  socket.emit('join_room_req', { name, room_id: code });
+}
+function startGame() { socket.emit('start_game'); }
+function playAgain()  { socket.emit('play_again'); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  CANVAS + STROKE LOGIC
+//  Mirrors script.js exactly:
+//  - strokes stored as [[x,y], [x,y], ...]   (raw pixel coords in 500×500 space)
+//  - converted via: downsample(5) → scale(x/500*255) → smooth → round
+//  - sent on mouseup/touchend (after stroke complete), NOT on a timer
+// ═══════════════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('draw-canvas');
+const ctx    = canvas.getContext('2d');
+
+// Canvas intrinsic size is always 500×500 — same as the working app.
+// rect.width in script.js was also 500 (fixed canvas), so x/rect.width === x/500.
+const CANVAS_LOGICAL_SIZE = 500;
+
+let drawing       = false;
+let strokes       = [];        // [ [[x,y],[x,y],...], ... ]  one array per stroke
+let currentStroke = [];        // [[x,y], ...]  being drawn now
+let penColor      = '#1a1a2e';
+let penSize       = 3;
+
+ctx.lineCap = ctx.lineJoin = 'round';
+ctx.strokeStyle = penColor;
+ctx.lineWidth   = penSize;
+
+/* ── exact copies from script.js ── */
+function downsampleStroke(stroke, step) {
+  return stroke.filter((_, i) => i % step === 0);
+}
+
+function smooth(arr) {
+  return arr.map((v, i, a) => {
+    if (i === 0 || i === a.length - 1) return v;
+    return (a[i-1] + v + a[i+1]) / 3;
+  });
+}
+
+/* ── convertToQuickDrawFormat — identical logic to script.js ── */
+function convertToQuickDrawFormat() {
+  const formatted  = [];
+  const allStrokes = currentStroke.length > 0 ? [...strokes, currentStroke] : [...strokes];
+
+  allStrokes.forEach(stroke => {
+    // limit length (same as script.js)
+    if (stroke.length > 200) stroke = stroke.slice(0, 200);
+
+    // downsample step=5 (same as script.js)
+    stroke = downsampleStroke(stroke, 5);
+    if (stroke.length === 0) return;
+
+    let xs = [], ys = [];
+    stroke.forEach(point => {
+      // scale to 0-255 using logical canvas size — same as (point[0] / rect.width) * 255
+      // when rect.width === 500 (fixed canvas in script.js)
+      xs.push((point[0] / CANVAS_LOGICAL_SIZE) * 255);
+      ys.push((point[1] / CANVAS_LOGICAL_SIZE) * 255);
+    });
+
+    // smooth (same as script.js)
+    xs = smooth(xs);
+    ys = smooth(ys);
+
+    // round (same as script.js)
+    xs = xs.map(v => Math.round(v));
+    ys = ys.map(v => Math.round(v));
+
+    formatted.push([xs, ys]);
+  });
+
+  return formatted;
+}
+
+/* ── get position in logical 500×500 coords from any event ── */
+function getPos(e) {
+  const rect  = canvas.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
+  // map CSS px → logical 500×500
+  return {
+    x: Math.round(((touch.clientX - rect.left) / rect.width)  * CANVAS_LOGICAL_SIZE),
+    y: Math.round(((touch.clientY - rect.top)  / rect.height) * CANVAS_LOGICAL_SIZE),
+  };
+}
+
+/* ── mouse events ── */
+canvas.addEventListener('mousedown', e => {
+  drawing = true;
+  currentStroke = [];
+  const { x, y } = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.strokeStyle = penColor;
+  ctx.lineWidth   = penSize;
+  currentStroke.push([x, y]);
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (!drawing) return;
+  const { x, y } = getPos(e);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  currentStroke.push([x, y]);
+});
+
+canvas.addEventListener('mouseup', () => {
+  if (!drawing) return;
+  drawing = false;
+  if (currentStroke.length > 0) strokes.push(currentStroke);
+  currentStroke = [];
+  sendStrokes();   // classify on stroke end — same as script.js
+});
+
+canvas.addEventListener('mouseleave', () => {
+  if (!drawing) return;
+  drawing = false;
+  if (currentStroke.length > 0) strokes.push(currentStroke);
+  currentStroke = [];
+});
+
+/* ── touch events ── */
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  drawing = true;
+  currentStroke = [];
+  const { x, y } = getPos(e);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.strokeStyle = penColor;
+  ctx.lineWidth   = penSize;
+  currentStroke.push([x, y]);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!drawing) return;
+  const { x, y } = getPos(e);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  currentStroke.push([x, y]);
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+  if (!drawing) return;
+  drawing = false;
+  if (currentStroke.length > 0) strokes.push(currentStroke);
+  currentStroke = [];
+  sendStrokes();   // classify on touch end
+});
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, CANVAS_LOGICAL_SIZE, CANVAS_LOGICAL_SIZE);
+  strokes = []; currentStroke = [];
+}
+
+function setColor(btn) {
+  penColor = btn.dataset.color;
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ctx.strokeStyle = penColor;
+}
+function setSize(btn) {
+  penSize = parseInt(btn.dataset.size);
+  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ctx.lineWidth = penSize;
+}
+
+/* ── send converted strokes to server ── */
+function sendStrokes() {
+  if (strokes.length === 0) return;
+  const data = convertToQuickDrawFormat();
+  if (data.length === 0) return;
+  socket.emit('submit_strokes', { strokes: data });
+}
+
+/* ── periodic fallback: also classify every 2s while pen is on canvas ── */
+function startClassifyLoop() {
+  stopClassifyLoop();
+  state.classifyInterval = setInterval(() => {
+    if (strokes.length > 0) sendStrokes();
+  }, 2000);
+}
+function stopClassifyLoop() { clearInterval(state.classifyInterval); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TIMER
+// ═══════════════════════════════════════════════════════════════════════════
+function startTimer(secs) { state.roundSecs = secs; updateTimer(secs); }
+function stopTimer()      { /* server drives ticks via socket */ }
+
+function updateTimer(remaining) {
+  const circ = 2 * Math.PI * 24;
+  const ring = document.getElementById('timer-ring');
+  const num  = document.getElementById('timer-num');
+  ring.style.strokeDashoffset = circ * (1 - remaining / state.roundSecs);
+  ring.style.stroke = remaining <= 5 ? 'var(--coral)' : 'var(--teal)';
+  num.textContent   = remaining;
+  num.style.color   = remaining <= 5 ? 'var(--coral)' : 'var(--ink)';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RENDER HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+const AVATARS = ['🐶','🐱','🦊','🐨','🦁','🐯','🐸','🐼'];
+function avatarFor(name) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return AVATARS[h % AVATARS.length];
+}
+
+function renderLobby(d) {
+  document.getElementById('lobby-code').textContent = d.room_id;
+  document.getElementById('lobby-url').textContent  =
+    `${location.protocol}//${location.hostname}${location.port ? ':'+location.port : ''}`;
+
+  const list = document.getElementById('lobby-player-list');
+  list.innerHTML = '';
+  d.players.forEach((p, i) => {
+    const li = document.createElement('li');
+    li.className = 'player-item';
+    li.innerHTML = `
+      <div class="avatar av${i%5}">${avatarFor(p.name)}</div>
+      <span>${esc(p.name)}</span>
+      ${p.is_host ? '<span class="host-badge">Host</span>' : ''}
+    `;
+    list.appendChild(li);
+  });
+  document.getElementById('player-count').textContent = `(${d.players.length}/5)`;
+  const isMe = d.host_sid === state.mySid;
+  document.getElementById('host-controls').style.display = isMe ? '' : 'none';
+  document.getElementById('guest-waiting').style.display = isMe ? 'none' : '';
+  if (isMe) document.getElementById('start-btn').disabled = d.players.length < 1;
+}
+
+function renderLivePred(d) {
+  const chips = (d.topk || []).map(t => {
+    const match = t.class.toLowerCase() === (state.currentWord || '').toLowerCase();
+    const pct   = Math.round(t.prob * 100);
+    const cls   = match ? 'match' : pct > 15 ? 'near' : 'other';
+    return `<span class="pred-chip ${cls}">${esc(t.class)} ${pct}%</span>`;
+  }).join('');
+  document.getElementById('live-pred').innerHTML =
+    `<div class="pred-label">AI thinks you're drawing:</div><div class="pred-chips">${chips}</div>`;
+}
+
+function renderMiniScores(players) {
+  document.getElementById('mini-scores').innerHTML = players.map(p =>
+    `<div class="mini-score-chip ${p.sid === state.mySid ? 'me' : ''}">
+       ${avatarFor(p.name)} ${esc(p.name)}: ${p.score}
+     </div>`
+  ).join('');
+}
+
+function showRoundResults(d) {
+  document.getElementById('res-round').textContent = d.round;
+  document.getElementById('res-word').textContent  = d.word;
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const list   = document.getElementById('results-list');
+  list.innerHTML = '';
+  d.leaderboard.forEach((p, i) => {
+    const res = (d.results || []).find(r => r.sid === p.sid) || {};
+    const div = document.createElement('div');
+    div.className = 'result-row' + (i === 0 ? ' winner-row' : '');
+    div.innerHTML = `
+      <div class="rank">${medals[i] || i+1}</div>
+      <div class="rname">${esc(p.name)}${p.sid === state.mySid ? ' (you)' : ''}</div>
+      ${res.correct ? `<div class="earned">+${res.earned}</div>` : ''}
+      <div class="rscore">${p.score}</div>
+    `;
+    list.appendChild(div);
+  });
+  document.getElementById('next-msg').textContent =
+    d.is_last ? 'Calculating final scores…' : 'Next round starting in 5 seconds…';
+  renderMiniScores(d.leaderboard);
+  showScreen('results');
+}
+
+function showGameOver(d) {
+  document.getElementById('winner-name').textContent  = d.winner ? d.winner.name : '—';
+  document.getElementById('winner-score').textContent = d.winner ? `${d.winner.score} points` : '';
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const lb = document.getElementById('final-leaderboard');
+  lb.innerHTML = '';
+  d.leaderboard.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'result-row' + (i === 0 ? ' winner-row' : '');
+    div.innerHTML = `
+      <div class="rank">${medals[i] || i+1}</div>
+      <div class="rname">${esc(p.name)}${p.sid === state.mySid ? ' (you)' : ''}</div>
+      <div class="rscore">${p.score}</div>
+    `;
+    lb.appendChild(div);
+  });
+  document.getElementById('host-play-again').style.display  = state.isHost ? '' : 'none';
+  document.getElementById('guest-play-again').style.display = state.isHost ? 'none' : '';
+  showScreen('gameover');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  hideOverlay();
+}
+function showOverlay(msg) {
+  document.getElementById('waiting-text').textContent = msg || 'Please wait…';
+  document.getElementById('waiting-overlay').classList.add('show');
+}
+function hideOverlay() {
+  document.getElementById('waiting-overlay').classList.remove('show');
+}
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+function showError(msg) { showToast('❌ ' + msg); }
+function showFieldError(id, msg) {
+  const el = document.getElementById(id); if(el){el.textContent=msg;el.style.display='block';}
+}
+function hideFieldError(id) {
+  const el = document.getElementById(id); if(el) el.style.display='none';
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+document.getElementById('join-code').addEventListener('input', function() {
+  this.value = this.value.toUpperCase().replace(/[^A-Z]/g,'');
+});
+</script>
+</body>
+</html>
