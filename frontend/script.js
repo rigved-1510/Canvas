@@ -8,9 +8,22 @@ let drawing = false;
 let strokes = [];
 let currentStroke = [];
 
-let lastSentTime = 0;
+/* ---------------- UTIL FUNCTIONS ---------------- */
 
-/* Start drawing */
+// Downsample (reduce points)
+function downsampleStroke(stroke, step = 3) {
+    return stroke.filter((_, i) => i % step === 0);
+}
+
+// Smooth stroke
+function smooth(arr) {
+    return arr.map((v, i, a) => {
+        if (i === 0 || i === a.length - 1) return v;
+        return (a[i-1] + v + a[i+1]) / 3;
+    });
+}
+
+/* ---------------- DRAWING ---------------- */
 
 canvas.addEventListener("mousedown", (e)=>{
 
@@ -28,7 +41,6 @@ canvas.addEventListener("mousedown", (e)=>{
     currentStroke.push([x,y]);
 
 });
-/* Continue drawing */
 
 canvas.addEventListener("mousemove", (e)=>{
 
@@ -44,10 +56,7 @@ canvas.addEventListener("mousemove", (e)=>{
 
     currentStroke.push([x,y]);
 
-    throttleSend();
-
 });
-/* End stroke */
 
 canvas.addEventListener("mouseup", ()=>{
 
@@ -56,8 +65,12 @@ canvas.addEventListener("mouseup", ()=>{
     if(currentStroke.length > 0)
         strokes.push(currentStroke);
 
+    // 🔥 SEND ONLY AFTER DRAWING COMPLETE
+    sendStrokes();
+
 });
-/* Clear canvas */
+
+/* ---------------- CLEAR ---------------- */
 
 function clearCanvas(){
 
@@ -67,7 +80,8 @@ function clearCanvas(){
     currentStroke = [];
 
 }
-/* Convert strokes to QuickDraw format */
+
+/* ---------------- CONVERT + FIX INPUT ---------------- */
 
 function convertToQuickDrawFormat(){
 
@@ -75,22 +89,42 @@ function convertToQuickDrawFormat(){
 
     let allStrokes = [...strokes];
 
-    // include current stroke while drawing
     if(currentStroke.length > 0){
         allStrokes.push(currentStroke);
     }
 
+    const rect = canvas.getBoundingClientRect();
+
     allStrokes.forEach(stroke => {
+
+        // limit length
+        if (stroke.length > 200) {
+            stroke = stroke.slice(0, 200);
+        }
+
+        // downsample
+        stroke = downsampleStroke(stroke, 5);
 
         let xs = [];
         let ys = [];
 
         stroke.forEach(point => {
 
-            xs.push(point[0]);
-            ys.push(point[1]);
+            let scaledX = (point[0] / rect.width) * 255;
+            let scaledY = (point[1] / rect.height) * 255;
+
+            xs.push(scaledX);
+            ys.push(scaledY);
 
         });
+
+        // smooth
+        xs = smooth(xs);
+        ys = smooth(ys);
+
+        // round
+        xs = xs.map(v => Math.round(v));
+        ys = ys.map(v => Math.round(v));
 
         formatted.push([xs, ys]);
 
@@ -98,21 +132,8 @@ function convertToQuickDrawFormat(){
 
     return formatted;
 }
-/* Throttle sending strokes */
 
-function throttleSend(){
-
-    const now = Date.now();
-
-    if(now - lastSentTime < 250)
-        return;
-
-    lastSentTime = now;
-
-    sendStrokes();
-
-}
-/* Send strokes to backend */
+/* ---------------- SEND ---------------- */
 
 function sendStrokes(){
 
@@ -123,7 +144,8 @@ function sendStrokes(){
     });
 
 }
-/* Receive prediction */
+
+/* ---------------- RECEIVE ---------------- */
 
 socket.on("prediction", (data)=>{
 

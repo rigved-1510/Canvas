@@ -40,7 +40,7 @@ class_files = [
 ]
 
 class_names = [c.replace(".csv","") for c in class_files]
-NUM_CLASSES = len(class_names)
+NUM_CLASSES = 200
 
 # ---------------- PREPROCESS ---------------- #
 
@@ -135,13 +135,17 @@ class DoodleModel(nn.Module):
 # ---------------- LOAD MODEL ---------------- #
 
 model = DoodleModel()
-model.load_state_dict(torch.load("model/rnn_model.pth", map_location="cpu"))
+model.load_state_dict(torch.load("model/ig.pth", map_location="cpu"))
 model.eval()
 
 # ---------------- PREDICT ---------------- #
 
 def predict(strokes):
+    print("RAW STROKES:", strokes[:1])  # 👈 check structure
+
     seq, length = preprocess(strokes)
+
+    print("SEQ SAMPLE:", seq[0][:5])   # 👈 check values
 
     with torch.no_grad():
         output,_ = model(seq, length)
