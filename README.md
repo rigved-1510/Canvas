@@ -9,12 +9,12 @@ A real-time AI-powered sketch recognition and multiplayer guessing game. Draw an
 
 # Features
 
-- 🎨 **Real-time Sketch Recognition** — Live predictions update as you draw, using a 2-layer LSTM with a custom attention mechanism trained on 200 sketch classes from the Google Quick, Draw! dataset.
-- 🧠 **Sequence-based Deep Learning** — Strokes are encoded as 5D temporal sequences (Δx, Δy, pen-down, pen-up, end-of-sketch) and processed by the model to capture drawing order and style.
-- ⚡ **Stroke Preprocessing Pipeline** — Client-side downsampling, Gaussian smoothing, and coordinate normalisation (scaled to 255) ensure clean, consistent input before inference.
-- 🏆 **Multiplayer Game Engine** — Room-based multiplayer (up to 5 players) with 5 rounds of 20 seconds each, real-time leaderboard, and a confidence + speed scoring formula.
-- 📡 **LAN / Hotspot Play** — No internet required; players connect over the same Wi-Fi or mobile hotspot using the host's network IP.
-- 🔝 **Top-K Predictions** — The model returns the top-5 most likely classes with confidence scores for each player during live gameplay.
+-  **Real-time Sketch Recognition** — Live predictions update as you draw, using a 2-layer LSTM with a custom attention mechanism trained on 200 sketch classes from the Google Quick, Draw! dataset.
+-  **Sequence-based Deep Learning** — Strokes are encoded as 5D temporal sequences (Δx, Δy, pen-down, pen-up, end-of-sketch) and processed by the model to capture drawing order and style.
+-  **Stroke Preprocessing Pipeline** — Client-side downsampling, Gaussian smoothing, and coordinate normalisation (scaled to 255) ensure clean, consistent input before inference.
+-  **Multiplayer Game Engine** — Room-based multiplayer (up to 5 players) with 5 rounds of 20 seconds each, real-time leaderboard, and a confidence + speed scoring formula.
+-  **LAN / Hotspot Play** — No internet required; players connect over the same Wi-Fi or mobile hotspot using the host's network IP.
+-  **Top-K Predictions** — The model returns the top-5 most likely classes with confidence scores for each player during live gameplay.
 
 ---
 
